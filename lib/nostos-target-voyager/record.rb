@@ -8,7 +8,7 @@ module Target
         begin
           @due_date = DateTime.strptime(attributes[:due_date], '%Y%m%d    %H%M%S')
         rescue
-          @due_date = nil
+          @due_date = attributes[:due_date]
         end
       end
 

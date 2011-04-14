@@ -1,7 +1,8 @@
-require 'nostos-target-voyager/railtie.rb'
-require 'nostos-target-voyager/config.rb'
-require 'nostos-target-voyager/record.rb'
 require 'voyager-sip'
+require 'activerecord-voyager-adapter'
+require 'nostos-target-voyager/railtie'
+require 'nostos-target-voyager/config'
+require 'nostos-target-voyager/record'
 
 VoyagerGem = Voyager
 
@@ -19,8 +20,8 @@ module Target
     def self.find(id)
       id = id.to_s unless id.is_a?(String)
 
-      VoyagerGem::SipClient.new(config.host, config.port) do |sip|
-        sip.login(config.username, config.password, config.location) do |response|
+      VoyagerGem::SipClient.new(config.sip[:host], config.sip[:port]) do |sip|
+        sip.login(config.sip[:username], config.sip[:password], config.sip[:location]) do |response|
           if response[:ok] != '1' # Login failed
             Rails::logger.error "Failed to sign in to SIP server"
             return false
@@ -57,8 +58,8 @@ module Target
       end
       # Illiad encodes strings in Windows-1252, but Voyager SIP requires all messages be ASCII.
 
-      VoyagerGem::SipClient.new(config.host, config.port) do |sip|
-        sip.login(config.username, config.password, config.location) do |response|
+      VoyagerGem::SipClient.new(config.sip[:host], config.sip[:port]) do |sip|
+        sip.login(config.sip[:username], config.sip[:password], config.sip[:location]) do |response|
           # First be sure that an item doesn't already exist.
           sip.item_status(item.id) do |item_status|
             unless item_status[:AF] == 'Item barcode not found.  Please consult library personnel for assistance.'
@@ -69,7 +70,7 @@ module Target
                                                  :charged => !item_status[:AH].empty?)
             else
               # Item doesn't exist
-              sip.create_bib(config.operator, title, item.id) do |response|
+              sip.create_bib(config.sip[:operator], title, item.id) do |response|
                 # Bib/MFHD/Item created. Store values.
                 #
                 # Values must be stored in order to delete the items via SIP.
@@ -85,6 +86,15 @@ module Target
         end
       end
       nil
+    end
+
+    def self.charged
+      VoyagerGem::AR::Item.joins(:circ_transaction).includes(:circ_transaction, :bib_text, :barcode).where(:item_type_id => 24).all.map do |item|
+        Target::Voyager::Record.new(:id => item.barcode.item_barcode,
+                                    :title => item.bib_item.bib_text.title,
+                                    :due_date => item.circ_transaction.current_due_date,
+                                    :charged => !item.circ_transaction.nil?)
+      end
     end
   end
 end
