@@ -1,5 +1,4 @@
-require 'voyager-sip'
-require 'activerecord-voyager-adapter'
+require 'voyager'
 require 'nostos-target-voyager/railtie'
 require 'nostos-target-voyager/config'
 require 'nostos-target-voyager/record'
@@ -20,34 +19,29 @@ module Target
     def self.find(id)
       id = id.to_s unless id.is_a?(String)
 
-      VoyagerGem::SipClient.new(config.sip[:host], config.sip[:port]) do |sip|
-        sip.login(config.sip[:username], config.sip[:password], config.sip[:location]) do |response|
-          if response[:ok] != '1' # Login failed
-            Rails::logger.error "Failed to sign in to SIP server"
-            return false
-          end
+      item_barcode = VoyagerGem::AR::Item::Barcode.includes(:item => [:circ_transaction, :bib_text]).where(:item_barcode => id).first
 
-          if response[:ok] == '1' # Login successful
-            sip.item_status(id) do |item_status|
-              return nil unless item_status[:AF] == 'Item Info retrieved successfully.'
-
-              if item_status[:circ_status] == '04' || item_status[:circ_status] == '05'
-                target = Target::Voyager::Record.new(:id => id, :title => item_status[:AJ], :charged => true, :due_date => item_status[:AH])
-              else
-                target = Target::Voyager::Record.new(:id => id, :title => item_status[:AJ], :charged => false, :due_date => nil)
-              end
-
-              return target
-            end
-          end
-        end
+      if item_barcode
+        Target::Voyager::Record.new(:id => item_barcode.item_barcode,
+                                    :title => item_barcode.item.bib_text.title,
+                                    :due_date => item_barcode.item.circ_transaction.try(:current_due_date),
+                                    :charged => !item_barcode.item.circ_transaction.nil?)
+      else
+        nil
       end
-
-      nil
     end
 
     def self.create(item = {})
       return nil if item.id.nil? || item.title.nil?
+
+      # Check if the item already exists.
+      if VoyagerGem::AR::Item::Barcode.where(:item_barcode => item.id.to_s).exists?
+        item_barcode = VoyagerGem::AR::Item::Barcode.includes(:item => [:circ_transaction, :bib_text]).where(:item_barcode => item.id.to_s).first
+        return Target::Voyager::Record.new(:id => item_barcode.item_barcode,
+                                    :title => item_barcode.item.bib_text.title,
+                                    :due_date => item_barcode.item.circ_transaction.try(:current_due_date),
+                                    :charged => !item_barcode.item.circ_transaction.nil?)
+      end
 
       # Title should truncate to 32 characters and append "/ *12345*"
       title = "#{item.title[0..31]} / *#{item.id}*"
@@ -58,12 +52,13 @@ module Target
       end
       # Illiad encodes strings in Windows-1252, but Voyager SIP requires all messages be ASCII.
 
-      VoyagerGem::SipClient.new(config.sip[:host], config.sip[:port]) do |sip|
+      VoyagerGem::SIP::Client.new(config.sip[:host], config.sip[:port]) do |sip|
         sip.login(config.sip[:username], config.sip[:password], config.sip[:location]) do |response|
           # First be sure that an item doesn't already exist.
           sip.item_status(item.id) do |item_status|
             unless item_status[:AF] == 'Item barcode not found.  Please consult library personnel for assistance.'
               # Item already exists
+              # This should pretty much never happen since we check above for existence.
               return Target::Voyager::Record.new(:id => item.id,
                                                  :title => item_status[:AJ],
                                                  :due_date => item_status[:AH],
