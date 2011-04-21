@@ -12,22 +12,23 @@ Add the following to your Gemfile and run `bundle install`
 
 ## Configuration
 
-In `config/application.rb` add the following options:
+You can interactively configure the Voyager target driver by running `rails generate target_voyager:install`. This will prompt you for the necessariy values.
 
-    config.target_voyager.sip = {
-      :host = '',
-      :port = '',
-      :username = '',
-      :password = '',
-      :operator = '',
-      :location = ''
-    }
-    config.target_voyager.db = {
-      :adapter  => 'oracle_enhanced',
-      :database => '', # This is most likely VGER
-      :username => '',
-      :password => ''
-    }
+You can manually configure the Voyager target driver in `config/target_voyager.rb`:
+
+    db:
+      adapter: 'oracle_enhanced'
+      database:     # This is most likely VGER
+      username:
+      password:
+
+    sip:
+      host:
+      port:
+      username:
+      password:
+      operator:
+      location:
 
 Note that `username` and `location` is the operator id and location code used to sign into the SIP server (or Circulation module). `operator` is the operator id used for creating items. Theoretically they should be identical, however it is not required.
 
