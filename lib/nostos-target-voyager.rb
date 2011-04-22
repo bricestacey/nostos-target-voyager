@@ -51,8 +51,8 @@ module Target
       end
       # Illiad encodes strings in Windows-1252, but Voyager SIP requires all messages be ASCII.
 
-      ::Voyager::SIP::Client.new(config.sip[:host], config.sip[:port]) do |sip|
-        sip.login(config.sip[:username], config.sip[:password], config.sip[:location]) do |response|
+      ::Voyager::SIP::Client.new(config.sip["host"], config.sip["port"]) do |sip|
+        sip.login(config.sip["username"], config.sip["password"], config.sip["location"]) do |response|
           # First be sure that an item doesn't already exist.
           sip.item_status(item.id) do |item_status|
             unless item_status[:AF] == 'Item barcode not found.  Please consult library personnel for assistance.'
@@ -64,7 +64,7 @@ module Target
                                                  :charged => !item_status[:AH].empty?)
             else
               # Item doesn't exist
-              sip.create_bib(config.sip[:operator], title, item.id) do |response|
+              sip.create_bib(config.sip["operator"], title, item.id) do |response|
                 # Bib/MFHD/Item created. Store values.
                 #
                 # Values must be stored in order to delete the items via SIP.
